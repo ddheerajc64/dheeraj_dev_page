@@ -8,127 +8,183 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <style>
+        /* --- 1. DYNAMIC THEME ENGINE --- */
         :root {
-            --gold: #d4af37; --gold-glow: rgba(212, 175, 55, 0.5); --gold-light: rgba(212, 175, 55, 0.1);
+            --accent: #d4af37; --accent-glow: rgba(212, 175, 55, 0.5); --accent-light: rgba(212, 175, 55, 0.1);
             --bg: #050505; --text-main: #f4f4f9; --text-muted: #b0b0b0; --card-bg: rgba(20, 20, 20, 0.6);
         }
-
-        body.neon-mode {
-            --gold: #ff00ff; --gold-glow: rgba(255, 0, 255, 0.8); --gold-light: rgba(255, 0, 255, 0.15);
+        body.theme-neon {
+            --accent: #ff00ff; --accent-glow: rgba(255, 0, 255, 0.8); --accent-light: rgba(255, 0, 255, 0.15);
             --bg: #050011; --text-main: #00ffff; --text-muted: #aa88ff; --card-bg: rgba(10, 0, 20, 0.7);
+        }
+        body.theme-matrix {
+            --accent: #00ff41; --accent-glow: rgba(0, 255, 65, 0.6); --accent-light: rgba(0, 255, 65, 0.1);
+            --bg: #000a02; --text-main: #e0ffe0; --text-muted: #008f11; --card-bg: rgba(0, 15, 5, 0.8);
+        }
+        body.theme-blood {
+            --accent: #ff003c; --accent-glow: rgba(255, 0, 60, 0.6); --accent-light: rgba(255, 0, 60, 0.15);
+            --bg: #0a0000; --text-main: #ffe0e0; --text-muted: #aa4444; --card-bg: rgba(20, 0, 0, 0.7);
         }
 
         body, html {
             margin: 0; padding: 0; width: 100%; height: 1400vh;
             background: var(--bg); color: var(--text-main); font-family: 'Segoe UI', sans-serif;
-            cursor: none; transition: background 0.5s ease;
+            cursor: none; transition: background 0.5s ease, color 0.5s ease;
             scrollbar-width: none; -ms-overflow-style: none; overflow-x: hidden;
         }
         body::-webkit-scrollbar { display: none; }
 
         #noise-overlay {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            pointer-events: none; z-index: 9998; opacity: 0.05;
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 9998; opacity: 0.05;
             background-image: url('data:image/svg+xml;charset=utf-8,%3Csvg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noiseFilter"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23noiseFilter)"/%3E%3C/svg%3E');
         }
 
-        #preloader {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 10001; display: flex; flex-direction: column; pointer-events: none;
+        /* --- 2. CUSTOM CONTEXT MENU --- */
+        #context-menu {
+            position: fixed; display: none; z-index: 20000; width: 200px;
+            background: rgba(10, 10, 10, 0.8); backdrop-filter: blur(15px);
+            border: 1px solid var(--accent-light); border-radius: 8px; overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
         }
+        .context-item {
+            padding: 12px 20px; font-size: 0.9rem; color: var(--text-main); cursor: none;
+            border-bottom: 1px solid rgba(255,255,255,0.05); transition: 0.2s;
+        }
+        .context-item:hover { background: var(--accent-light); color: var(--accent); padding-left: 25px; }
+
+        /* --- 3. THEME SWITCHER HUD --- */
+        .theme-panel {
+            position: fixed; left: 20px; top: 50%; transform: translateY(-50%); z-index: 15000;
+            display: flex; flex-direction: column; gap: 15px;
+        }
+        .theme-btn {
+            width: 15px; height: 15px; border-radius: 50%; cursor: none; border: 2px solid transparent;
+            transition: 0.3s;
+        }
+        .theme-btn:hover { transform: scale(1.5); }
+        .theme-btn.active { border-color: #fff; box-shadow: 0 0 10px #fff; }
+
+        /* --- 4. SCROLL PROGRESS HUD --- */
+        .scroll-hud {
+            position: fixed; bottom: 30px; right: 30px; z-index: 15000;
+            width: 50px; height: 50px; display: flex; justify-content: center; align-items: center;
+        }
+        .scroll-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+        .scroll-circle-bg { fill: none; stroke: rgba(255,255,255,0.1); stroke-width: 3; }
+        .scroll-circle { fill: none; stroke: var(--accent); stroke-width: 3; stroke-dasharray: 125; stroke-dashoffset: 125; transition: stroke-dashoffset 0.1s linear, stroke 0.5s; }
+        .scroll-percent { font-size: 0.7rem; font-weight: bold; color: var(--text-main); }
+
+        /* --- Preloader --- */
+        #preloader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 10001; display: flex; flex-direction: column; pointer-events: none; }
         .preloader-half { width: 100%; height: 50vh; background: #000; transition: transform 1.2s cubic-bezier(0.77, 0, 0.175, 1); }
         .preloader-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 2rem; font-weight: bold; letter-spacing: 5px; color: #fff; z-index: 10002; transition: 0.5s ease; }
-        .preloader-text span { color: var(--gold); }
+        .preloader-text span { color: var(--accent); transition: color 0.5s;}
         .loaded .preloader-half.top { transform: translateY(-100%); }
         .loaded .preloader-half.bottom { transform: translateY(100%); }
         .loaded .preloader-text { opacity: 0; }
 
+        /* --- Golden Thread --- */
         #thread-container { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 5; pointer-events: none; }
-        #golden-thread { fill: transparent; stroke: var(--gold); stroke-width: 2; stroke-dasharray: 3000; stroke-dashoffset: 3000; stroke-linecap: round; filter: drop-shadow(0 0 8px var(--gold-glow)); transition: stroke 0.5s ease; }
+        #golden-thread { fill: transparent; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 3000; stroke-dashoffset: 3000; stroke-linecap: round; filter: drop-shadow(0 0 8px var(--accent-glow)); transition: stroke 0.5s ease; }
 
-        /* --- THE ADVANCED MULTI-TOOL CURSOR --- */
-        .cursor-wrapper {
-            position: fixed; top: 0; left: 0; pointer-events: none; z-index: 9999;
-            will-change: transform; /* Handled entirely by JS for velocity stretch */
-            transform-origin: center center;
-        }
-        .cursor-dot {
-            position: absolute; top: -3px; left: -3px; width: 6px; height: 6px; 
-            background-color: var(--gold); border-radius: 50%; 
-            box-shadow: 0 0 10px var(--gold); mix-blend-mode: difference;
-        }
-        .cursor-outline {
-            position: absolute; top: -20px; left: -20px; width: 40px; height: 40px;
-            border: 1px solid var(--gold-glow); border-radius: 50%;
-            display: flex; justify-content: center; align-items: center; overflow: hidden;
-            background-size: cover; background-position: center;
-            transition: width 0.2s, height 0.2s, border-color 0.5s, background-color 0.2s, top 0.2s, left 0.2s;
-            mix-blend-mode: difference;
-        }
-        .cursor-text {
-            color: #fff; font-size: 0.8rem; font-weight: bold; letter-spacing: 2px;
-            opacity: 0; transform: scale(0.5); transition: 0.2s; white-space: nowrap; text-shadow: 0 2px 10px rgba(0,0,0,0.8);
-        }
-        /* Hold-to-Confirm Ring */
-        .cursor-progress-svg {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            transform: rotate(-90deg); opacity: 0; transition: opacity 0.2s;
-        }
-        #hold-ring { stroke: var(--gold); stroke-dasharray: 283; stroke-dashoffset: 283; transition: stroke-dashoffset 0.1s linear; }
+        /* --- MULTI-TOOL CURSOR --- */
+        .cursor-wrapper { position: fixed; top: 0; left: 0; pointer-events: none; z-index: 25000; transform-origin: center center; will-change: transform; }
+        .cursor-dot { position: absolute; top: -3px; left: -3px; width: 6px; height: 6px; background-color: var(--accent); border-radius: 50%; box-shadow: 0 0 10px var(--accent); mix-blend-mode: difference; transition: 0.5s; }
+        .cursor-outline { position: absolute; top: -20px; left: -20px; width: 40px; height: 40px; border: 1px solid var(--accent-glow); border-radius: 50%; display: flex; justify-content: center; align-items: center; overflow: hidden; background-size: cover; background-position: center; transition: width 0.2s, height 0.2s, border-color 0.5s, background-color 0.2s, top 0.2s, left 0.2s; mix-blend-mode: difference; }
+        .cursor-text { color: #fff; font-size: 0.8rem; font-weight: bold; letter-spacing: 2px; opacity: 0; transform: scale(0.5); transition: 0.2s; white-space: nowrap; text-shadow: 0 2px 10px rgba(0,0,0,0.8); }
+        .cursor-progress-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: rotate(-90deg); opacity: 0; transition: opacity 0.2s; }
+        #hold-ring { stroke: var(--accent); stroke-dasharray: 283; stroke-dashoffset: 283; transition: stroke-dashoffset 0.1s linear, stroke 0.5s; }
 
-        .top-header, .bottom-footer {
-            position: fixed; left: 0; width: 100%; padding: 20px 50px; display: flex; justify-content: space-between; align-items: center;
-            box-sizing: border-box; z-index: 100; background: rgba(5, 5, 5, 0.2); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-        }
-        .top-header { top: 0; border-bottom: 1px solid var(--gold-light); }
-        .bottom-footer { bottom: 0; padding: 15px 50px; border-top: 1px solid var(--gold-light); }
+        /* --- UI Elements --- */
+        .top-header, .bottom-footer { position: fixed; left: 0; width: 100%; padding: 20px 50px; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; z-index: 100; background: rgba(5, 5, 5, 0.2); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+        .top-header { top: 0; border-bottom: 1px solid var(--accent-light); }
+        .bottom-footer { bottom: 0; padding: 15px 50px; border-top: 1px solid var(--accent-light); }
         .logo { font-size: 1.5rem; font-weight: bold; letter-spacing: 1px; color: var(--text-main); }
-        .logo span { color: var(--gold); }
-        nav a, .social-links a { color: var(--text-main); text-decoration: none; margin-left: 30px; text-transform: uppercase; letter-spacing: 1px; cursor: none; display: inline-block; }
-        
+        .logo span { color: var(--accent); transition: color 0.5s;}
+        nav a, .social-links a { color: var(--text-main); text-decoration: none; margin-left: 30px; text-transform: uppercase; letter-spacing: 1px; cursor: none; display: inline-block; transition: 0.3s;}
+        nav a:hover, .social-links a:hover { color: var(--accent); }
+
         #dust-canvas, #webgl-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
         #dust-canvas { z-index: 2; }
 
+        /* --- Scene & Typography --- */
         .scene { position: fixed; top: 0; left: 0; width: 100%; height: 100vh; perspective: 1000px; transform-style: preserve-3d; overflow: hidden; pointer-events: none; z-index: 10; }
-        .kinetic-text { position: absolute; top: 50%; left: 50%; font-size: 15rem; font-weight: 900; white-space: nowrap; color: transparent; -webkit-text-stroke: 2px var(--gold-light); transform-style: preserve-3d; pointer-events: none; }
+        .kinetic-text { position: absolute; top: 50%; left: 50%; font-size: 15rem; font-weight: 900; white-space: nowrap; color: transparent; -webkit-text-stroke: 2px var(--accent-light); transform-style: preserve-3d; pointer-events: none; transition: 0.5s; }
         .depth-layer { position: absolute; top: 50%; left: 50%; width: 80%; max-width: 900px; text-align: center; transform: translate(-50%, -50%); transform-style: preserve-3d; pointer-events: auto; }
 
-        h1 { font-size: 5rem; margin-bottom: 10px; letter-spacing: 2px; background: linear-gradient(45deg, var(--gold), #fff, var(--gold)); background-size: 200% auto; color: transparent; -webkit-background-clip: text; background-clip: text; animation: shimmerGold 4s linear infinite; display: inline-block; }
-        @keyframes shimmerGold { to { background-position: 200% center; } }
-        h2 { font-size: 3.5rem; color: var(--gold); margin-bottom: 20px; display: inline-block; }
-        .subtitle { font-size: 1.3rem; color: var(--text-muted); line-height: 1.6; display: inline-block; }
-        .quote { font-size: 2.5rem; font-style: italic; color: var(--text-main); font-weight: 300; line-height: 1.4; border-left: 4px solid var(--gold); padding-left: 30px; text-align: left; }
+        /* 5. Cyber-Glitch Hover Effect */
+        .glitch-text { position: relative; display: inline-block; transition: color 0.5s; }
+        .glitch-text:hover { animation: glitchSkew 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite; color: transparent; }
+        .glitch-text:hover::before, .glitch-text:hover::after { content: attr(data-text); position: absolute; top: 0; left: 0; width: 100%; height: 100%; color: var(--accent); }
+        .glitch-text:hover::before { left: 2px; text-shadow: -2px 0 #ff00c1; clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%); animation: glitchAnim 2s infinite linear alternate-reverse; }
+        .glitch-text:hover::after { left: -2px; text-shadow: -2px 0 #00fff9; clip-path: polygon(0 55%, 100% 55%, 100% 100%, 0 100%); animation: glitchAnim 1.5s infinite linear alternate-reverse; }
+        
+        @keyframes glitchAnim { 
+            0% { clip-path: polygon(0 2%, 100% 2%, 100% 5%, 0 5%); } 20% { clip-path: polygon(0 15%, 100% 15%, 100% 15%, 0 15%); } 
+            40% { clip-path: polygon(0 10%, 100% 10%, 100% 20%, 0 20%); } 60% { clip-path: polygon(0 1%, 100% 1%, 100% 2%, 0 2%); } 
+            80% { clip-path: polygon(0 33%, 100% 33%, 100% 33%, 0 33%); } 100% { clip-path: polygon(0 44%, 100% 44%, 100% 44%, 0 44%); } 
+        }
+        @keyframes glitchSkew { 0% { transform: skew(0deg); } 20% { transform: skew(-20deg); } 40% { transform: skew(20deg); } 60% { transform: skew(-10deg); } 80% { transform: skew(10deg); } 100% { transform: skew(0deg); } }
+
+        /* 6. Parallax Hero Text */
+        .parallax-hero { display: inline-block; will-change: transform; transition: transform 0.1s ease-out; }
+
+        h1 { font-size: 5rem; margin-bottom: 10px; letter-spacing: 2px; text-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+        h2 { font-size: 3.5rem; color: var(--accent); margin-bottom: 20px; display: inline-block; transition: 0.5s; }
+        .subtitle { font-size: 1.3rem; color: var(--text-muted); line-height: 1.6; display: inline-block; transition: 0.5s; }
+        .quote { font-size: 2.5rem; font-style: italic; color: var(--text-main); font-weight: 300; line-height: 1.4; border-left: 4px solid var(--accent); padding-left: 30px; text-align: left; transition: 0.5s; }
 
         .skills-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; margin-top: 30px; }
-        .skill-tag { padding: 12px 24px; font-size: 1.1rem; font-weight: bold; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--gold-light); border-radius: 30px; color: var(--text-main); cursor: none; transition: background 0.3s, border-color 0.3s, color 0.3s; display: inline-block; }
-        .skill-tag:hover { background: var(--gold-light); border-color: var(--gold); color: var(--gold); }
+        .skill-tag { padding: 12px 24px; font-size: 1.1rem; font-weight: bold; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--accent-light); border-radius: 30px; color: var(--text-main); cursor: none; transition: background 0.3s, border-color 0.3s, color 0.3s; display: inline-block; }
+        .skill-tag:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
 
-        .timeline { margin-top: 50px; text-align: left; border-left: 2px solid var(--gold-light); padding-left: 30px; position: relative; }
+        .timeline { margin-top: 50px; text-align: left; border-left: 2px solid var(--accent-light); padding-left: 30px; position: relative; transition: 0.5s;}
         .timeline-item { margin-bottom: 40px; position: relative; }
-        .timeline-item::before { content: ''; position: absolute; left: -37px; top: 5px; width: 12px; height: 12px; background: var(--bg); border: 2px solid var(--gold); border-radius: 50%; transition: 0.3s; }
-        .timeline-item:hover::before { background: var(--gold); box-shadow: 0 0 15px var(--gold-glow); }
-        .timeline-date { color: var(--gold); font-weight: bold; letter-spacing: 1px; margin-bottom: 5px; display: inline-block; }
+        .timeline-item::before { content: ''; position: absolute; left: -37px; top: 5px; width: 12px; height: 12px; background: var(--bg); border: 2px solid var(--accent); border-radius: 50%; transition: 0.3s; }
+        .timeline-item:hover::before { background: var(--accent); box-shadow: 0 0 15px var(--accent-glow); }
+        .timeline-date { color: var(--accent); font-weight: bold; letter-spacing: 1px; margin-bottom: 5px; display: inline-block; transition: 0.5s;}
         .timeline-title { font-size: 1.5rem; margin: 0 0 10px 0; display: inline-block; }
-        .timeline-desc { color: var(--text-muted); line-height: 1.5; margin: 0; display: inline-block; }
+        .timeline-desc { color: var(--text-muted); line-height: 1.5; margin: 0; display: inline-block; transition: 0.5s;}
 
-        /* Project Cards Grid */
         .projects-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 30px; }
-        .project-card { background: var(--card-bg); border: 1px solid var(--gold-light); cursor: none; border-radius: 15px; padding: 40px; text-align: left; transform-style: preserve-3d; transition: border 0.5s, box-shadow 0.5s; }
-        .project-card:hover { border-color: var(--gold); box-shadow: 0 30px 60px var(--gold-light); }
+        .project-card { background: var(--card-bg); border: 1px solid var(--accent-light); cursor: none; border-radius: 15px; padding: 40px; text-align: left; transform-style: preserve-3d; transition: border 0.5s, box-shadow 0.5s, background 0.5s; }
+        .project-card:hover { border-color: var(--accent); box-shadow: 0 30px 60px var(--accent-light); }
         .project-card > * { transform: translateZ(30px); transition: 0.2s ease-out; pointer-events: none; }
-        .project-card h3 { color: var(--gold); font-size: 1.8rem; margin: 0 0 10px 0; }
-        .project-card p { color: var(--text-muted); font-size: 1rem; line-height: 1.5; margin-bottom: 0; }
+        .project-card h3 { color: var(--accent); font-size: 1.8rem; margin: 0 0 10px 0; transition: 0.5s; }
+        .project-card p { color: var(--text-muted); font-size: 1rem; line-height: 1.5; margin-bottom: 0; transition: 0.5s;}
         
-        /* The Repulsive Button */
         .repel-container { position: relative; display: inline-block; padding: 50px; margin-top: 20px;}
         .repel-btn { display: inline-block; padding: 10px 20px; font-size: 0.9rem; font-weight: bold; color: #ff3333; border: 1px solid #ff3333; background: transparent; border-radius: 5px; cursor: none; will-change: transform; }
 
-        .cta-btn { display: inline-block; padding: 20px 50px; font-size: 1.2rem; font-weight: bold; text-transform: uppercase; color: #000; background: var(--gold); border-radius: 50px; text-decoration: none; cursor: none; }
+        .cta-btn { display: inline-block; padding: 20px 50px; font-size: 1.2rem; font-weight: bold; text-transform: uppercase; color: var(--bg); background: var(--accent); border-radius: 50px; text-decoration: none; cursor: none; transition: 0.5s; }
+        .cta-btn:hover { box-shadow: 0 0 40px var(--accent-glow); }
     </style>
 </head>
-<body>
+<body class="theme-default">
 
     <div id="noise-overlay"></div>
+
+    <div id="context-menu">
+        <div class="context-item magnetic-pull" onclick="copyEmail()">📋 Copy Email</div>
+        <div class="context-item magnetic-pull" onclick="switchTheme('theme-neon')">🎨 Neon Theme</div>
+        <div class="context-item magnetic-pull" onclick="switchTheme('theme-matrix')">💻 Matrix Theme</div>
+        <div class="context-item magnetic-pull" onclick="window.scrollTo(0,0)">⬆️ Back to Top</div>
+    </div>
+
+    <div class="theme-panel">
+        <div class="theme-btn active magnetic-pull" style="background: #d4af37;" onclick="switchTheme('theme-default')" title="Gold"></div>
+        <div class="theme-btn magnetic-pull" style="background: #ff00ff;" onclick="switchTheme('theme-neon')" title="Neon"></div>
+        <div class="theme-btn magnetic-pull" style="background: #00ff41;" onclick="switchTheme('theme-matrix')" title="Matrix"></div>
+        <div class="theme-btn magnetic-pull" style="background: #ff003c;" onclick="switchTheme('theme-blood')" title="Blood"></div>
+    </div>
+
+    <div class="scroll-hud">
+        <svg class="scroll-svg" viewBox="0 0 50 50">
+            <circle class="scroll-circle-bg" cx="25" cy="25" r="20"></circle>
+            <circle class="scroll-circle" id="scroll-progress-circle" cx="25" cy="25" r="20"></circle>
+        </svg>
+        <span class="scroll-percent" id="scroll-percent-text">0</span>
+    </div>
 
     <div id="preloader">
         <div class="preloader-half top"></div>
@@ -172,12 +228,14 @@
         <div class="kinetic-text" data-z="-12000">LET'S CONNECT &mdash; LET'S CONNECT &mdash;</div>
         
         <div class="depth-layer" data-z="0">
-            <h1 class="magnetic-text">Hi, I'm Dheeraj</h1><br>
-            <p class="subtitle magnetic-text">Type <strong>N - E - O - N</strong> to breach the mainframe.</p>
+            <div class="parallax-hero" id="hero-title">
+                <h1 class="magnetic-text">Hi, I'm Dheeraj</h1>
+            </div><br>
+            <p class="subtitle magnetic-text">Right-click anywhere to access the Terminal.</p>
         </div>
 
         <div class="depth-layer" data-z="-2500">
-            <h2 class="magnetic-text">My Arsenal</h2><br>
+            <h2 class="magnetic-text glitch-text" data-text="My Arsenal">My Arsenal</h2><br>
             <p class="subtitle magnetic-text">Technologies I wield to bring ideas to life.</p>
             <div class="skills-container">
                 <div class="skill-tag magnetic-pull">JavaScript (ES6+)</div>
@@ -186,13 +244,11 @@
                 <div class="skill-tag magnetic-pull">Three.js / WebGL</div>
                 <div class="skill-tag magnetic-pull">Tailwind CSS</div>
                 <div class="skill-tag magnetic-pull">Next.js</div>
-                <div class="skill-tag magnetic-pull">GSAP Animation</div>
-                <div class="skill-tag magnetic-pull">Figma UI/UX</div>
             </div>
         </div>
 
         <div class="depth-layer" data-z="-5000">
-            <h2 class="magnetic-text">Selected Work</h2>
+            <h2 class="magnetic-text glitch-text" data-text="Selected Work">Selected Work</h2>
             <div class="projects-grid">
                 <div class="project-card tilt-card cursor-view" data-image="https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=400&q=80">
                     <h3>Aura E-Commerce</h3>
@@ -214,7 +270,7 @@
         </div>
 
         <div class="depth-layer" data-z="-7500">
-            <h2 class="magnetic-text">The Journey</h2>
+            <h2 class="magnetic-text glitch-text" data-text="The Journey">The Journey</h2>
             <div class="timeline">
                 <div class="timeline-item">
                     <span class="timeline-date magnetic-text">2024 - Present</span><br>
@@ -225,11 +281,6 @@
                     <span class="timeline-date magnetic-text">2022 - 2024</span><br>
                     <h3 class="timeline-title magnetic-text">Creative Web Developer</h3><br>
                     <p class="timeline-desc magnetic-text">Specialized in award-winning marketing sites, implementing GSAP, Three.js, and custom shaders.</p>
-                </div>
-                <div class="timeline-item">
-                    <span class="timeline-date magnetic-text">2020 - 2022</span><br>
-                    <h3 class="timeline-title magnetic-text">Full-Stack Developer</h3><br>
-                    <p class="timeline-desc magnetic-text">Built scalable backends with Node/Express and designed robust React frontends from the ground up.</p>
                 </div>
             </div>
         </div>
@@ -242,7 +293,7 @@
         </div>
 
         <div class="depth-layer" data-z="-12500">
-            <h2 class="magnetic-text">Let's Build Something</h2><br>
+            <h2 class="magnetic-text glitch-text" data-text="Let's Build Something">Let's Build Something</h2><br>
             <p class="subtitle magnetic-text" style="margin-bottom: 40px;">Currently accepting freelance opportunities and exciting roles.</p><br>
             <a href="#" class="cta-btn cursor-hold">Contact Dheeraj</a>
         </div>
@@ -263,154 +314,134 @@
             progressEl.innerText = loadProgress;
         }, 30);
 
-        // --- EASTER EGG (NEON) ---
-        let typedCode = ''; const secretCode = 'neon'; let isNeonMode = false; let themeColor = 0xd4af37;
-        window.addEventListener('keydown', (e) => {
-            typedCode += e.key.toLowerCase(); if (typedCode.length > secretCode.length) typedCode = typedCode.slice(-secretCode.length);
-            if (typedCode === secretCode) {
-                isNeonMode = !isNeonMode; document.body.classList.toggle('neon-mode');
-                themeColor = isNeonMode ? 0xff00ff : 0xd4af37; torusMaterial.color.setHex(themeColor);
-                document.body.style.background = '#fff'; setTimeout(() => { document.body.style.background = ''; }, 100);
-            }
+        // --- CONTEXT MENU LOGIC ---
+        const contextMenu = document.getElementById('context-menu');
+        window.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            contextMenu.style.display = 'block';
+            // Keep menu within viewport bounds
+            let x = e.clientX; let y = e.clientY;
+            if(x + 200 > window.innerWidth) x -= 200;
+            if(y + 200 > window.innerHeight) y -= 200;
+            contextMenu.style.left = x + 'px';
+            contextMenu.style.top = y + 'px';
         });
+        window.addEventListener('click', () => { contextMenu.style.display = 'none'; });
 
-        // --- THREE.JS ---
+        // Dummy copy function
+        function copyEmail() { alert("Email copied to clipboard: contact@dheeraj.com"); }
+
+        // --- THEME ENGINE ---
+        let currentThemeColor = 0xd4af37; // Default Gold
+        const themeColors = { 'theme-default': 0xd4af37, 'theme-neon': 0xff00ff, 'theme-matrix': 0x00ff41, 'theme-blood': 0xff003c };
+        const themeBtns = document.querySelectorAll('.theme-btn');
+
+        function switchTheme(themeName) {
+            // Update Body Class
+            document.body.className = themeName;
+            if(isLoaded) document.body.classList.add('loaded'); // Preserve preloader state
+            
+            // Update Active Button
+            themeBtns.forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Update Three.js & Canvas Particle Hex Color
+            currentThemeColor = themeColors[themeName];
+            torusMaterial.color.setHex(currentThemeColor);
+            
+            // Flash Effect
+            document.body.style.background = '#fff';
+            setTimeout(() => { document.body.style.background = ''; }, 50);
+        }
+
+        // --- THREE.JS BACKGROUND ---
         const webglCanvas = document.getElementById('webgl-canvas');
         const scene = new THREE.Scene(); const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ canvas: webglCanvas, alpha: true, antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight); renderer.setPixelRatio(window.devicePixelRatio);
         const geometry = new THREE.TorusKnotGeometry(10, 3, 100, 16);
-        const torusMaterial = new THREE.MeshBasicMaterial({ color: themeColor, wireframe: true, transparent: true, opacity: 0.15 });
+        const torusMaterial = new THREE.MeshBasicMaterial({ color: currentThemeColor, wireframe: true, transparent: true, opacity: 0.15 });
         const torusKnot = new THREE.Mesh(geometry, torusMaterial); scene.add(torusKnot); camera.position.z = 30;
 
-        // --- CURSOR LOGIC & VELOCITY TRACKING ---
-        const cursorWrapper = document.getElementById('cursor-wrapper');
-        const outline = document.getElementById('cursor-outline');
-        const dot = document.getElementById('cursor-dot');
-        const cursorText = document.querySelector('.cursor-text');
-        const holdRingSvg = document.querySelector('.cursor-progress-svg');
-        const holdRingPath = document.getElementById('hold-ring');
+        // --- MULTI-TOOL CURSOR ---
+        const cursorWrapper = document.getElementById('cursor-wrapper'); const outline = document.getElementById('cursor-outline');
+        const dot = document.getElementById('cursor-dot'); const cursorText = document.querySelector('.cursor-text');
+        const holdRingSvg = document.querySelector('.cursor-progress-svg'); const holdRingPath = document.getElementById('hold-ring');
         
-        let mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-        let lastMouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+        let mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 }; let lastMouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
         let outlinePos = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-        
-        let targetW = 40, targetH = 40, targetBr = 50; 
-        let curW = 40, curH = 40, curBr = 50;
-        let hoverType = 'none'; // 'text', 'button', 'view', 'hold', 'none'
-        let hoverTarget = null;
-        let mouse3D = { x: 0, y: 0 };
-        
-        // Hold-to-Confirm Variables
-        let isHolding = false;
-        let holdProgress = 0;
+        let targetW = 40, targetH = 40, targetBr = 50; let curW = 40, curH = 40, curBr = 50;
+        let hoverType = 'none'; let hoverTarget = null; let mouse3D = { x: 0, y: 0 };
+        let isHolding = false; let holdProgress = 0;
+
+        // Hero Parallax Tracking Variables
+        const heroTitle = document.getElementById('hero-title');
 
         window.addEventListener('mousemove', (e) => {
             mouse.x = e.clientX; mouse.y = e.clientY;
-            mouse3D.x = (e.clientX / window.innerWidth) * 2 - 1;
-            mouse3D.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            dot.style.left = mouse.x + 'px'; dot.style.top = mouse.y + 'px';
+            mouse3D.x = (e.clientX / window.innerWidth) * 2 - 1; mouse3D.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            
+            // Hero Parallax Move (Opposite to mouse)
+            if(currentScroll < 1000) {
+                let px = mouse3D.x * -20; let py = mouse3D.y * 20;
+                heroTitle.style.transform = `translate3d(${px}px, ${py}px, 0)`;
+            }
         });
 
         window.addEventListener('mousedown', () => { 
             if(hoverType === 'hold') isHolding = true; 
-            else { targetW = 15; targetH = 15; outline.style.backgroundColor = isNeonMode?'var(--gold)':'var(--gold)'; }
+            else { targetW = 15; targetH = 15; outline.style.backgroundColor = 'var(--accent)'; }
         });
         window.addEventListener('mouseup', () => { 
             isHolding = false; holdProgress = 0; holdRingPath.style.strokeDashoffset = 283;
             if(hoverType === 'none') { targetW = 40; targetH = 40; outline.style.backgroundColor = 'transparent'; }
         });
 
-        // Physical Buttons
         document.querySelectorAll('.magnetic-pull').forEach(el => {
             el.addEventListener('mouseenter', () => {
                 if(isHolding) return; hoverType = 'button'; hoverTarget = el;
-                let rect = el.getBoundingClientRect();
-                targetW = rect.width + 20; targetH = rect.height + 20; targetBr = el.classList.contains('skill-tag') ? 30 : 8; 
-                outline.style.backgroundColor = 'var(--gold-light)';
+                let rect = el.getBoundingClientRect(); targetW = rect.width + 20; targetH = rect.height + 20; targetBr = el.classList.contains('skill-tag') ? 30 : 8; outline.style.backgroundColor = 'var(--accent-light)';
             });
-            el.addEventListener('mousemove', (e) => {
-                const rect = el.getBoundingClientRect();
-                const x = (e.clientX - (rect.left + rect.width / 2)) * 0.3; const y = (e.clientY - (rect.top + rect.height / 2)) * 0.3;
-                el.style.transform = `translate(${x}px, ${y}px)`;
-            });
-            el.addEventListener('mouseleave', () => {
-                if(!isHolding) { hoverType = 'none'; hoverTarget = null; targetW = 40; targetH = 40; targetBr = 50; outline.style.backgroundColor = 'transparent'; }
-                el.style.transform = `translate(0px, 0px)`;
-            });
+            el.addEventListener('mousemove', (e) => { const rect = el.getBoundingClientRect(); const x = (e.clientX - (rect.left + rect.width / 2)) * 0.3; const y = (e.clientY - (rect.top + rect.height / 2)) * 0.3; el.style.transform = `translate(${x}px, ${y}px)`; });
+            el.addEventListener('mouseleave', () => { if(!isHolding) { hoverType = 'none'; hoverTarget = null; targetW = 40; targetH = 40; targetBr = 50; outline.style.backgroundColor = 'transparent'; } el.style.transform = `translate(0px, 0px)`; });
         });
 
-        // Text Magnetism
         document.querySelectorAll('.magnetic-text').forEach(el => {
-            el.addEventListener('mouseenter', () => {
-                if(isHolding) return; hoverType = 'text';
-                targetW = 80; targetH = 15; targetBr = 8; outline.style.backgroundColor = 'var(--gold-light)'; outline.style.borderWidth = '0px'; 
-            });
-            el.addEventListener('mouseleave', () => {
-                if(!isHolding) { hoverType = 'none'; targetW = 40; targetH = 40; targetBr = 50; outline.style.backgroundColor = 'transparent'; outline.style.borderWidth = '1px'; }
-            });
+            el.addEventListener('mouseenter', () => { if(isHolding) return; hoverType = 'text'; targetW = 80; targetH = 15; targetBr = 8; outline.style.backgroundColor = 'var(--accent-light)'; outline.style.borderWidth = '0px'; });
+            el.addEventListener('mouseleave', () => { if(!isHolding) { hoverType = 'none'; targetW = 40; targetH = 40; targetBr = 50; outline.style.backgroundColor = 'transparent'; outline.style.borderWidth = '1px'; } });
         });
 
-        // The Media Portal (Projects)
         document.querySelectorAll('.cursor-view').forEach(el => {
-            el.addEventListener('mouseenter', () => {
-                if(isHolding) return; hoverType = 'view';
-                targetW = 200; targetH = 200; targetBr = 50;
-                outline.style.backgroundColor = 'var(--bg)'; outline.style.borderWidth = '0px';
-                outline.style.backgroundImage = `url('${el.getAttribute('data-image')}')`; // Inject Image
-                cursorText.style.opacity = '1'; cursorText.style.transform = 'scale(1)'; dot.style.opacity = '0';
-            });
-            el.addEventListener('mouseleave', () => {
-                if(!isHolding) { hoverType = 'none'; targetW = 40; targetH = 40; targetBr = 50; outline.style.backgroundColor = 'transparent'; outline.style.borderWidth = '1px'; outline.style.backgroundImage = 'none'; }
-                cursorText.style.opacity = '0'; cursorText.style.transform = 'scale(0.5)'; dot.style.opacity = '1';
-            });
+            el.addEventListener('mouseenter', () => { if(isHolding) return; hoverType = 'view'; targetW = 200; targetH = 200; targetBr = 50; outline.style.backgroundColor = 'var(--bg)'; outline.style.borderWidth = '0px'; outline.style.backgroundImage = `url('${el.getAttribute('data-image')}')`; cursorText.style.opacity = '1'; cursorText.style.transform = 'scale(1)'; dot.style.opacity = '0'; });
+            el.addEventListener('mouseleave', () => { if(!isHolding) { hoverType = 'none'; targetW = 40; targetH = 40; targetBr = 50; outline.style.backgroundColor = 'transparent'; outline.style.borderWidth = '1px'; outline.style.backgroundImage = 'none'; } cursorText.style.opacity = '0'; cursorText.style.transform = 'scale(0.5)'; dot.style.opacity = '1'; });
         });
 
-        // Hold to Confirm (CTA)
         document.querySelectorAll('.cursor-hold').forEach(el => {
-            el.addEventListener('mouseenter', () => {
-                hoverType = 'hold'; targetW = 80; targetH = 80; targetBr = 50;
-                outline.style.backgroundColor = 'var(--gold-light)'; outline.style.borderWidth = '0px';
-                cursorText.innerText = "HOLD"; cursorText.style.opacity = '1'; cursorText.style.transform = 'scale(1)';
-                holdRingSvg.style.opacity = '1'; dot.style.opacity = '0';
-            });
-            el.addEventListener('mouseleave', () => {
-                isHolding = false; holdProgress = 0; holdRingPath.style.strokeDashoffset = 283;
-                hoverType = 'none'; targetW = 40; targetH = 40; targetBr = 50;
-                outline.style.backgroundColor = 'transparent'; outline.style.borderWidth = '1px';
-                cursorText.style.opacity = '0'; cursorText.style.transform = 'scale(0.5)'; cursorText.innerText = "VIEW ↗";
-                holdRingSvg.style.opacity = '0'; dot.style.opacity = '1';
-            });
+            el.addEventListener('mouseenter', () => { hoverType = 'hold'; targetW = 80; targetH = 80; targetBr = 50; outline.style.backgroundColor = 'var(--accent-light)'; outline.style.borderWidth = '0px'; cursorText.innerText = "HOLD"; cursorText.style.opacity = '1'; cursorText.style.transform = 'scale(1)'; holdRingSvg.style.opacity = '1'; dot.style.opacity = '0'; });
+            el.addEventListener('mouseleave', () => { isHolding = false; holdProgress = 0; holdRingPath.style.strokeDashoffset = 283; hoverType = 'none'; targetW = 40; targetH = 40; targetBr = 50; outline.style.backgroundColor = 'transparent'; outline.style.borderWidth = '1px'; cursorText.style.opacity = '0'; cursorText.style.transform = 'scale(0.5)'; cursorText.innerText = "VIEW"; holdRingSvg.style.opacity = '0'; dot.style.opacity = '1'; });
         });
 
-        // Tilt Cards
         document.querySelectorAll('.tilt-card').forEach(card => {
-            card.addEventListener('mousemove', (e) => {
-                const rect = card.getBoundingClientRect(); const x = e.clientX - rect.left; const y = e.clientY - rect.top;  
-                const centerX = rect.width / 2; const centerY = rect.height / 2;
-                card.style.transform = `perspective(1000px) rotateX(${((y - centerY) / centerY) * -10}deg) rotateY(${((x - centerX) / centerX) * 10}deg) scale3d(1.02, 1.02, 1.02)`;
-            });
+            card.addEventListener('mousemove', (e) => { const rect = card.getBoundingClientRect(); const x = e.clientX - rect.left; const y = e.clientY - rect.top; const centerX = rect.width / 2; const centerY = rect.height / 2; card.style.transform = `perspective(1000px) rotateX(${((y - centerY) / centerY) * -10}deg) rotateY(${((x - centerX) / centerX) * 10}deg) scale3d(1.02, 1.02, 1.02)`; });
             card.addEventListener('mouseleave', () => { card.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)`; });
         });
 
-        // The "Repulsive" Easter Egg Button
-        const repelBtn = document.querySelector('.repel-btn');
-        let repelX = 0, repelY = 0;
+        const repelBtn = document.querySelector('.repel-btn'); let repelX = 0, repelY = 0;
         
-        // --- PARTICLES & SHOCKWAVES ---
+        // --- PARTICLES, SHOCKWAVES & SCROLLING ---
         const dustCanvas = document.getElementById('dust-canvas'); const ctx = dustCanvas.getContext('2d');
         const layers = document.querySelectorAll('.depth-layer'); const kineticTexts = document.querySelectorAll('.kinetic-text');
         const threadPath = document.getElementById('golden-thread');
+        const scrollProgressCircle = document.getElementById('scroll-progress-circle');
+        const scrollPercentText = document.getElementById('scroll-percent-text');
+        
         let targetScroll = 0, currentScroll = 0; const MAX_SCROLL = 13000; 
 
-        function resize() { 
-            dustCanvas.width = window.innerWidth; dustCanvas.height = window.innerHeight; 
-            renderer.setSize(window.innerWidth, window.innerHeight); camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
-        }
+        function resize() { dustCanvas.width = window.innerWidth; dustCanvas.height = window.innerHeight; renderer.setSize(window.innerWidth, window.innerHeight); camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); }
         window.addEventListener('resize', resize); resize();
         window.addEventListener('wheel', (e) => { if(isLoaded) targetScroll += e.deltaY * 1.5; targetScroll = Math.max(0, Math.min(targetScroll, MAX_SCROLL)); }, { passive: false });
-
-        let touchStartY = 0;
-        window.addEventListener('touchstart', (e) => { touchStartY = e.touches[0].clientY; }, { passive: false });
+        let touchStartY = 0; window.addEventListener('touchstart', (e) => { touchStartY = e.touches[0].clientY; }, { passive: false });
         window.addEventListener('touchmove', (e) => { if(!isLoaded) return; let touchY = e.touches[0].clientY; targetScroll += (touchStartY - touchY) * 2.5; targetScroll = Math.max(0, Math.min(targetScroll, MAX_SCROLL)); touchStartY = touchY; }, { passive: false });
 
         let particles = [];
@@ -420,7 +451,7 @@
                 let activeZ = this.z - (Date.now() * 0.05) - (scrollOffset * 1.5); activeZ = ((activeZ % 15000) + 15000) % 15000;
                 let scale = 800 / (800 + activeZ); let px = dustCanvas.width / 2 + this.x * scale; let py = dustCanvas.height / 2 + this.y * scale;
                 let opacity = Math.min(1, ((15000 - activeZ) / 15000) * 1.5); 
-                let r = (themeColor >> 16) & 255; let g = (themeColor >> 8) & 255; let b = themeColor & 255;
+                let r = (currentThemeColor >> 16) & 255; let g = (currentThemeColor >> 8) & 255; let b = currentThemeColor & 255;
                 ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`; ctx.beginPath(); ctx.arc(px, py, this.baseSize * scale, 0, Math.PI * 2); ctx.fill();
             }
         }
@@ -430,85 +461,52 @@
         class BurstParticle {
             constructor(x, y, power = 10) {
                 this.x = x; this.y = y; const angle = Math.random() * Math.PI * 2; const speed = Math.random() * power + 2;
-                this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed;
-                this.size = Math.random() * 4 + 1; this.life = 1.0; this.decay = Math.random() * 0.05 + 0.02;
+                this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed; this.size = Math.random() * 4 + 1; this.life = 1.0; this.decay = Math.random() * 0.05 + 0.02;
             }
             updateAndDraw() {
                 this.x += this.vx; this.y += this.vy; this.life -= this.decay;
-                let r = (themeColor >> 16) & 255; let g = (themeColor >> 8) & 255; let b = themeColor & 255;
-                ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${Math.max(0, this.life)})`;
-                ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill();
+                let r = (currentThemeColor >> 16) & 255; let g = (currentThemeColor >> 8) & 255; let b = currentThemeColor & 255;
+                ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${Math.max(0, this.life)})`; ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill();
             }
         }
-        function triggerExplosion(x, y, amount, power) {
-            for(let i = 0; i < amount; i++) shockwaves.push(new BurstParticle(x, y, power));
-        }
-
+        function triggerExplosion(x, y, amount, power) { for(let i = 0; i < amount; i++) shockwaves.push(new BurstParticle(x, y, power)); }
         window.addEventListener('mousedown', (e) => { if(!isLoaded) return; triggerExplosion(e.clientX, e.clientY, 20, 10); });
 
         // --- MASTER LOOP ---
         function animate() {
             currentScroll += (targetScroll - currentScroll) * 0.08;
 
-            // Hold-to-Confirm Math
             if(isHolding && hoverType === 'hold') {
-                holdProgress += 1.5; // Fills up over ~1-2 seconds
-                let offset = 283 - (283 * (holdProgress / 100));
-                holdRingPath.style.strokeDashoffset = Math.max(0, offset);
-                
-                // Trigger action when full
-                if(holdProgress >= 100) {
-                    isHolding = false;
-                    cursorText.innerText = "LAUNCHING";
-                    triggerExplosion(mouse.x, mouse.y, 100, 30); // Massive boom
-                    setTimeout(() => { alert("Redirecting to Email / Contact Form!"); }, 500);
-                }
+                holdProgress += 1.5; let offset = 283 - (283 * (holdProgress / 100)); holdRingPath.style.strokeDashoffset = Math.max(0, offset);
+                if(holdProgress >= 100) { isHolding = false; cursorText.innerText = "LAUNCHING"; triggerExplosion(mouse.x, mouse.y, 100, 30); setTimeout(() => { alert("Redirecting to Email Form!"); }, 500); }
             }
 
-            // Velocity & Stretch Math for Cursor
-            let velX = mouse.x - lastMouse.x;
-            let velY = mouse.y - lastMouse.y;
-            let speed = Math.sqrt(velX * velX + velY * velY);
-            
-            // Only stretch if we are NOT hovering over an interactive element (keep it a circle for UI feedback)
+            let velX = mouse.x - lastMouse.x; let velY = mouse.y - lastMouse.y; let speed = Math.sqrt(velX * velX + velY * velY);
             let scaleX = 1, scaleY = 1, angle = 0;
-            if (hoverType === 'none' && speed > 5) {
-                angle = Math.atan2(velY, velX) * 180 / Math.PI;
-                scaleX = 1 + Math.min(speed * 0.015, 0.8); // Stretch forward
-                scaleY = 1 - Math.min(speed * 0.005, 0.4); // Squash sides
-            }
-
+            if (hoverType === 'none' && speed > 5) { angle = Math.atan2(velY, velX) * 180 / Math.PI; scaleX = 1 + Math.min(speed * 0.015, 0.8); scaleY = 1 - Math.min(speed * 0.005, 0.4); }
             lastMouse.x = mouse.x; lastMouse.y = mouse.y;
 
             if (hoverType === 'button' && hoverTarget && !isHolding) {
-                let rect = hoverTarget.getBoundingClientRect();
-                outlinePos.x += ((rect.left + rect.width / 2) - outlinePos.x) * 0.25;
-                outlinePos.y += ((rect.top + rect.height / 2) - outlinePos.y) * 0.25;
-            } else {
-                outlinePos.x += (mouse.x - outlinePos.x) * 0.25;
-                outlinePos.y += (mouse.y - outlinePos.y) * 0.25;
-            }
+                let rect = hoverTarget.getBoundingClientRect(); outlinePos.x += ((rect.left + rect.width / 2) - outlinePos.x) * 0.25; outlinePos.y += ((rect.top + rect.height / 2) - outlinePos.y) * 0.25;
+            } else { outlinePos.x += (mouse.x - outlinePos.x) * 0.25; outlinePos.y += (mouse.y - outlinePos.y) * 0.25; }
             
             curW += (targetW - curW) * 0.25; curH += (targetH - curH) * 0.25; curBr += (targetBr - curBr) * 0.25;
-            
             cursorWrapper.style.transform = `translate3d(${outlinePos.x}px, ${outlinePos.y}px, 0) rotate(${angle}deg) scale(${scaleX}, ${scaleY})`;
             outline.style.width = curW + 'px'; outline.style.height = curH + 'px'; outline.style.borderRadius = curBr + '%';
-            
-            // Inner elements negate the rotation/scale so they don't look weird
             outline.style.top = -(curH/2) + 'px'; outline.style.left = -(curW/2) + 'px';
             cursorText.style.transform = `rotate(${-angle}deg) scale(${hoverType==='view'||hoverType==='hold' ? 1 : 0.5})`;
             
-            // SVG Path
-            threadPath.style.strokeDashoffset = 3000 * (1 - (currentScroll / MAX_SCROLL));
+            // Scroll HUD & Thread Math
+            let scrollPercentage = currentScroll / MAX_SCROLL;
+            threadPath.style.strokeDashoffset = 3000 * (1 - scrollPercentage);
+            scrollProgressCircle.style.strokeDashoffset = 125 * (1 - scrollPercentage);
+            scrollPercentText.innerText = Math.round(scrollPercentage * 100);
 
-            // Repel Button Math
             if(repelBtn) {
-                let rect = repelBtn.getBoundingClientRect();
-                let bx = rect.left + rect.width / 2; let by = rect.top + rect.height / 2;
+                let rect = repelBtn.getBoundingClientRect(); let bx = rect.left + rect.width / 2; let by = rect.top + rect.height / 2;
                 let dist = Math.hypot(mouse.x - bx, mouse.y - by);
                 if(dist < 150) { repelX += (bx - mouse.x) * 0.2; repelY += (by - mouse.y) * 0.2; }
-                repelX *= 0.8; repelY *= 0.8; // Friction
-                repelBtn.style.transform = `translate(${repelX}px, ${repelY}px)`;
+                repelX *= 0.8; repelY *= 0.8; repelBtn.style.transform = `translate(${repelX}px, ${repelY}px)`;
             }
 
             layers.forEach(layer => {
@@ -516,15 +514,13 @@
                 if (zPos > 300) { opacity = 1 - ((zPos - 300) / 400); blurAmount = (zPos - 300) / 30; } 
                 else if (zPos < -1500) { opacity = 1 - (Math.abs(zPos + 1500) / 2500); blurAmount = Math.abs(zPos + 1500) / 300; }
                 opacity = Math.max(0, Math.min(1, opacity)); 
-                layer.style.pointerEvents = opacity < 0.1 ? 'none' : 'auto';
-                layer.style.transform = `translate(-50%, -50%) translateZ(${zPos}px)`; layer.style.opacity = opacity; layer.style.filter = `blur(${blurAmount}px)`;
+                layer.style.pointerEvents = opacity < 0.1 ? 'none' : 'auto'; layer.style.transform = `translate(-50%, -50%) translateZ(${zPos}px)`; layer.style.opacity = opacity; layer.style.filter = `blur(${blurAmount}px)`;
             });
 
             kineticTexts.forEach((text, index) => {
                 let zPos = parseFloat(text.getAttribute('data-z')) + (currentScroll * 2.5);
                 let opacity = Math.max(0, Math.min(0.3, zPos > -1000 ? 1 - ((zPos + 1000) / 1500) : 0.3)); 
-                text.style.transform = `translate(calc(-50% + ${currentScroll * 0.8 * (index % 2 === 0 ? -1 : 1)}px), -50%) translateZ(${zPos}px)`;
-                text.style.opacity = opacity;
+                text.style.transform = `translate(calc(-50% + ${currentScroll * 0.8 * (index % 2 === 0 ? -1 : 1)}px), -50%) translateZ(${zPos}px)`; text.style.opacity = opacity;
             });
 
             torusKnot.rotation.x += 0.005; torusKnot.rotation.y += 0.005;
@@ -536,7 +532,6 @@
 
             requestAnimationFrame(animate);
         }
-
         animate();
     </script>
 </body>
